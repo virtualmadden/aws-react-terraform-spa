@@ -1,0 +1,83 @@
+name: Deploy
+
+on:
+  workflow_call:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    env:
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-west-2' }}
+      TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
+      TF_VAR_hosted_zone_name: ${{ vars.HOSTED_ZONE_NAME }}
+      TF_VAR_include_www: ${{ vars.INCLUDE_WWW || 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - run: corepack enable
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          cache: yarn
+
+      - run: yarn install --immutable
+      - run: yarn build
+
+      # The deploy role trusts only this repo's main branch.
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-west-2' }}
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Terraform apply
+        id: terraform
+        working-directory: infrastructure/terraform/site
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=site/terraform.tfstate" \
+            -backend-config="region=$TF_VAR_aws_region"
+          terraform apply -auto-approve -input=false
+          {
+            echo "bucket=$(terraform output -raw site_bucket)"
+            echo "distribution=$(terraform output -raw cloudfront_distribution_id)"
+            echo "url=$(terraform output -raw url)"
+          } >> "$GITHUB_OUTPUT"
+
+      # Hashed assets are immutable; everything else (index.html, icons) revalidates.
+      # Old assets stay so open tabs keep working.
+      - name: Upload site
+        run: |
+          aws s3 sync dist/assets "s3://${{ steps.terraform.outputs.bucket }}/assets" \
+            --cache-control "public,max-age=31536000,immutable"
+          aws s3 sync dist "s3://${{ steps.terraform.outputs.bucket }}" \
+            --exclude "assets/*" --cache-control "no-cache" --delete
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.terraform.outputs.distribution }}" \
+            --paths "/*" --query Invalidation.Id --output text
+
+      - name: Smoke test
+        run: |
+          for _ in $(seq 1 30); do
+            curl -fsS -o /dev/null "${{ steps.terraform.outputs.url }}" && exit 0
+            sleep 10
+          done
+          echo "${{ steps.terraform.outputs.url }} did not respond" >&2
+          exit 1

@@ -1,0 +1,33 @@
+# Weekly, one grouped PR per ecosystem. Dependabot PRs get no OIDC token, so they run
+# checks but skip the plan.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+    ignore:
+      # Tracks the Node major CI runs (24.x in the workflows); bump both together.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    directories:
+      - /infrastructure/terraform/bootstrap
+      - /infrastructure/terraform/site
+    schedule:
+      interval: weekly
+    groups:
+      terraform:
+        patterns: ["*"]

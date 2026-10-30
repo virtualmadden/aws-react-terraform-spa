@@ -1,0 +1,5 @@
+# For running Terraform locally; CI sets these from GitHub repository variables instead.
+# Copy to terraform.tfvars (gitignored).
+domain_name = "example.com"
+# hosted_zone_name = "example.com"  # when domain_name is a subdomain of the zone
+# include_www      = false          # usually for a subdomain
