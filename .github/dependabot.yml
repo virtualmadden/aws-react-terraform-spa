@@ -13,6 +13,9 @@ updates:
       # Tracks the Node major CI runs (24.x in the workflows); bump both together.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # typescript-eslint 8 supports TypeScript <6.1; unpin once it supports 7.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: github-actions
     directory: /
