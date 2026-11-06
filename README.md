@@ -81,10 +81,14 @@ terraform plan
 | `src/`, `public/`, `index.html` | The app. Files in `public/` are served as-is. |
 | `infrastructure/terraform/bootstrap/` | One-time setup: state bucket, OIDC provider, deploy and plan roles. Local state. |
 | `infrastructure/terraform/site/` | The site: bucket, CloudFront, certificate, DNS records. Applied by CI. |
-| `.github/workflows/` | `on-pr.yml` checks and plans; `on-push.yml` checks and deploys `main`. |
+| `.github/workflows/` | `on-pr.yml` checks and plans; `on-push.yml` checks and deploys `main`. `release.yml` tags and releases this template. |
 
 ## Things to know
 
+- **Releasing the template.**
+  - Run **Release** from the Actions tab, or `gh workflow run release.yml`. It tags `main` and publishes a GitHub release with generated notes.
+  - With the default `bump: auto`, the commits since the last release pick the version: a breaking change (`feat!:` or `BREAKING CHANGE:`) is major, a `feat` is minor, anything else a patch. `dry_run` only prints the version.
+  - It runs only in the template repository; in a repository made from it, the workflow skips until you remove its `is_template` condition.
 - **Content Security Policy.**
   - The default allows only the site's own origin.
   - It blocks inline scripts and styles, and anything from a CDN or third-party API.
